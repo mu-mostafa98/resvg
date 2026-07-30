@@ -652,6 +652,8 @@ fn write_element(node: &Node, is_clip_path: bool, opt: &WriteOptions, xml: &mut 
         Node::Path(p) => {
             write_path(p, is_clip_path, Transform::default(), None, opt, xml);
         }
+        #[cfg(feature = "shape-preservation")]
+        Node::SimpleShape(_) => {},
         Node::Image(img) => {
             xml.start_svg_element(EId::Image);
             if !img.id.is_empty() {
@@ -835,6 +837,8 @@ fn write_group_element(g: &Group, is_clip_path: bool, opt: &WriteOptions, xml: &
                 Node::Group(child_group) => {
                     write_group_element(child_group, is_clip_path, opt, xml);
                 }
+                #[cfg(feature = "shape-preservation")]
+                Node::SimpleShape(_) => {},
                 Node::Path(child_path) => {
                     let clip_id = g.clip_path.as_ref().map(|cp| cp.id().to_string());
                     write_path(
@@ -1143,6 +1147,8 @@ fn has_xlink(parent: &Group) -> bool {
                     return true;
                 }
             }
+            #[cfg(feature = "shape-preservation")]
+            Node::SimpleShape(_) => {},
             Node::Image(_) => {
                 return true;
             }

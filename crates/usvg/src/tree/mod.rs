@@ -579,12 +579,25 @@ pub struct Stroke {
     pub(crate) width: StrokeWidth,
     pub(crate) linecap: LineCap,
     pub(crate) linejoin: LineJoin,
-    // Whether the current stroke needs to be resolved relative
-    // to a context element.
     pub(crate) context_element: Option<ContextElement>,
 }
 
 impl Stroke {
+    /// Creates a new `Stroke` with the given paint and width.
+    /// All other fields use SVG defaults.
+    pub fn new(paint: Paint, width: StrokeWidth) -> Self {
+        Stroke {
+            paint,
+            width,
+            dasharray: None,
+            dashoffset: 0.0,
+            miterlimit: StrokeMiterlimit::default(),
+            opacity: Opacity::ONE,
+            linecap: LineCap::default(),
+            linejoin: LineJoin::default(),
+            context_element: None,
+        }
+    }
     /// Stroke paint.
     pub fn paint(&self) -> &Paint {
         &self.paint
@@ -690,12 +703,19 @@ pub struct Fill {
     pub(crate) paint: Paint,
     pub(crate) opacity: Opacity,
     pub(crate) rule: FillRule,
-    // Whether the current fill needs to be resolved relative
-    // to a context element.
     pub(crate) context_element: Option<ContextElement>,
 }
 
 impl Fill {
+    /// Creates a new `Fill` with the given paint, opacity, and rule.
+    pub fn new(paint: Paint, opacity: Opacity, rule: FillRule) -> Self {
+        Fill {
+            paint,
+            opacity,
+            rule,
+            context_element: None,
+        }
+    }
     /// Fill paint.
     pub fn paint(&self) -> &Paint {
         &self.paint
@@ -891,12 +911,153 @@ impl Mask {
     }
 }
 
+/// A simple shape kind — preserves geometry type for GPU-native rendering.
+#[cfg(feature = "shape-preservation")]
+#[allow(missing_docs)]
+#[derive(Clone, Copy, Debug)]
+pub enum SimpleShapeKind {
+    Rect {
+        x: f32,
+        y: f32,
+        width: f32,
+        height: f32,
+        rx: Option<f32>,
+        ry: Option<f32>,
+    },
+    Circle {
+        cx: f32,
+        cy: f32,
+        r: f32,
+    },
+    Ellipse {
+        cx: f32,
+        cy: f32,
+        rx: f32,
+        ry: f32,
+    },
+    Line {
+        x1: f32,
+        y1: f32,
+        x2: f32,
+        y2: f32,
+    },
+}
+
+/// A simple shape element — rect, circle, ellipse, or line that
+/// does not need path conversion. Preserves shape semantics for
+/// GPU-clip rendering terminals.
+///
+/// `rect`, `circle`, `ellipse`, `line` elements in SVG.
+#[cfg(feature = "shape-preservation")]
+#[derive(Clone, Debug)]
+pub struct SimpleShape {
+    pub(crate) id: String,
+    pub(crate) visible: bool,
+    pub(crate) fill: Option<Fill>,
+    pub(crate) stroke: Option<Stroke>,
+    pub(crate) paint_order: PaintOrder,
+    pub(crate) rendering_mode: ShapeRendering,
+    pub(crate) kind: SimpleShapeKind,
+    pub(crate) abs_transform: Transform,
+    pub(crate) bounding_box: Rect,
+    pub(crate) abs_bounding_box: Rect,
+}
+
+#[cfg(feature = "shape-preservation")]
+impl SimpleShape {
+    /// Creates a new `SimpleShape` from the given geometry kind.
+    pub fn new(
+        kind: SimpleShapeKind,
+        fill: Option<Fill>,
+        stroke: Option<Stroke>,
+        abs_transform: Transform,
+    ) -> Self {
+        let bounding_box = kind.bounding_box();
+        let abs_bounding_box = if abs_transform.has_skew() {
+            bounding_box
+        } else {
+            bounding_box.transform(abs_transform).unwrap_or(bounding_box)
+        };
+        SimpleShape {
+            id: String::new(),
+            visible: true,
+            fill,
+            stroke,
+            paint_order: PaintOrder::default(),
+            rendering_mode: ShapeRendering::default(),
+            kind,
+            abs_transform,
+            bounding_box,
+            abs_bounding_box,
+        }
+    }
+
+    /// Element's ID.
+    pub fn id(&self) -> &str { &self.id }
+
+    /// Element visibility.
+    pub fn is_visible(&self) -> bool { self.visible }
+
+    /// Fill style.
+    pub fn fill(&self) -> Option<&Fill> { self.fill.as_ref() }
+
+    /// Stroke style.
+    pub fn stroke(&self) -> Option<&Stroke> { self.stroke.as_ref() }
+
+    /// Sets the fill style.
+    pub fn set_fill(&mut self, fill: Option<Fill>) { self.fill = fill; }
+
+    /// Sets the stroke style.
+    pub fn set_stroke(&mut self, stroke: Option<Stroke>) { self.stroke = stroke; }
+
+    /// Sets visibility.
+    pub fn set_visible(&mut self, visible: bool) { self.visible = visible; }
+
+    /// Shape kind.
+    pub fn kind(&self) -> &SimpleShapeKind { &self.kind }
+
+    /// Paint order.
+    pub fn paint_order(&self) -> PaintOrder { self.paint_order }
+
+    /// Rendering mode.
+    pub fn rendering_mode(&self) -> ShapeRendering { self.rendering_mode }
+
+    /// Element's absolute transform.
+    pub fn abs_transform(&self) -> Transform { self.abs_transform }
+
+    /// Element's object bounding box.
+    pub fn bounding_box(&self) -> Rect { self.bounding_box }
+
+    /// Element's bounding box in canvas coordinates.
+    pub fn abs_bounding_box(&self) -> Rect { self.abs_bounding_box }
+}
+
+#[cfg(feature = "shape-preservation")]
+impl SimpleShapeKind {
+    fn bounding_box(&self) -> Rect {
+        match self {
+            SimpleShapeKind::Rect { x, y, width, height, .. } =>
+                Rect::from_xywh(*x, *y, *width, *height).unwrap_or_else(|| Rect::from_xywh(0.0, 0.0, 1.0, 1.0).unwrap()),
+            SimpleShapeKind::Circle { cx, cy, r } =>
+                Rect::from_xywh(cx - r, cy - r, r * 2.0, r * 2.0).unwrap_or_else(|| Rect::from_xywh(0.0, 0.0, 1.0, 1.0).unwrap()),
+            SimpleShapeKind::Ellipse { cx, cy, rx, ry } =>
+                Rect::from_xywh(cx - rx, cy - ry, rx * 2.0, ry * 2.0).unwrap_or_else(|| Rect::from_xywh(0.0, 0.0, 1.0, 1.0).unwrap()),
+            SimpleShapeKind::Line { x1, y1, x2, y2 } => {
+                let (x, y, w, h) = (x1.min(*x2), y1.min(*y2), (x2 - x1).abs(), (y2 - y1).abs());
+                Rect::from_xywh(x, y, w.max(1.0), h.max(1.0)).unwrap_or_else(|| Rect::from_xywh(0.0, 0.0, 1.0, 1.0).unwrap())
+            }
+        }
+    }
+}
+
 /// Node's kind.
 #[allow(missing_docs)]
 #[derive(Clone, Debug)]
 pub enum Node {
     Group(Box<Group>),
     Path(Box<Path>),
+    #[cfg(feature = "shape-preservation")]
+    SimpleShape(Box<SimpleShape>),
     Image(Box<Image>),
     Text(Box<Text>),
 }
@@ -907,6 +1068,8 @@ impl Node {
         match self {
             Node::Group(e) => e.id.as_str(),
             Node::Path(e) => e.id.as_str(),
+            #[cfg(feature = "shape-preservation")]
+            Node::SimpleShape(e) => e.id(),
             Node::Image(e) => e.id.as_str(),
             Node::Text(e) => e.id.as_str(),
         }
@@ -919,6 +1082,8 @@ impl Node {
         match self {
             Node::Group(group) => group.abs_transform(),
             Node::Path(path) => path.abs_transform(),
+            #[cfg(feature = "shape-preservation")]
+            Node::SimpleShape(shape) => shape.abs_transform(),
             Node::Image(image) => image.abs_transform(),
             Node::Text(text) => text.abs_transform(),
         }
@@ -929,6 +1094,8 @@ impl Node {
         match self {
             Node::Group(group) => group.bounding_box(),
             Node::Path(path) => path.bounding_box(),
+            #[cfg(feature = "shape-preservation")]
+            Node::SimpleShape(shape) => shape.bounding_box(),
             Node::Image(image) => image.bounding_box(),
             Node::Text(text) => text.bounding_box(),
         }
@@ -939,6 +1106,8 @@ impl Node {
         match self {
             Node::Group(group) => group.abs_bounding_box(),
             Node::Path(path) => path.abs_bounding_box(),
+            #[cfg(feature = "shape-preservation")]
+            Node::SimpleShape(shape) => shape.abs_bounding_box(),
             Node::Image(image) => image.abs_bounding_box(),
             Node::Text(text) => text.abs_bounding_box(),
         }
@@ -949,6 +1118,8 @@ impl Node {
         match self {
             Node::Group(group) => group.stroke_bounding_box(),
             Node::Path(path) => path.stroke_bounding_box(),
+            #[cfg(feature = "shape-preservation")]
+            Node::SimpleShape(shape) => shape.bounding_box(),
             // Image cannot be stroked.
             Node::Image(image) => image.bounding_box(),
             Node::Text(text) => text.stroke_bounding_box(),
@@ -960,6 +1131,8 @@ impl Node {
         match self {
             Node::Group(group) => group.abs_stroke_bounding_box(),
             Node::Path(path) => path.abs_stroke_bounding_box(),
+            #[cfg(feature = "shape-preservation")]
+            Node::SimpleShape(shape) => shape.abs_bounding_box(),
             // Image cannot be stroked.
             Node::Image(image) => image.abs_bounding_box(),
             Node::Text(text) => text.abs_stroke_bounding_box(),
@@ -977,6 +1150,8 @@ impl Node {
             Node::Group(group) => Some(group.abs_layer_bounding_box()),
             // Hor/ver path without stroke can return None. This is expected.
             Node::Path(path) => path.abs_bounding_box().to_non_zero_rect(),
+            #[cfg(feature = "shape-preservation")]
+            Node::SimpleShape(shape) => shape.abs_bounding_box().to_non_zero_rect(),
             Node::Image(image) => image.abs_bounding_box().to_non_zero_rect(),
             Node::Text(text) => text.abs_bounding_box().to_non_zero_rect(),
         }
@@ -1010,6 +1185,8 @@ impl Node {
         match self {
             Node::Group(group) => group.subroots(&mut f),
             Node::Path(path) => path.subroots(&mut f),
+            #[cfg(feature = "shape-preservation")]
+            Node::SimpleShape(_) => {},
             Node::Image(image) => image.subroots(&mut f),
             Node::Text(text) => text.subroots(&mut f),
         }
@@ -1045,6 +1222,11 @@ pub struct Group {
 }
 
 impl Group {
+    /// Creates a new empty `Group`.
+    pub fn new() -> Self {
+        Group::empty()
+    }
+
     pub(crate) fn empty() -> Self {
         let dummy = Rect::from_xywh(0.0, 0.0, 0.0, 0.0).unwrap();
         Group {
@@ -1203,6 +1385,16 @@ impl Group {
         !self.children.is_empty()
     }
 
+    /// Appends a child node to the group.
+    pub fn push_child(&mut self, child: Node) {
+        self.children.push(child);
+    }
+
+    /// Removes and returns the child at the given index.
+    pub fn remove_child(&mut self, index: usize) -> Node {
+        self.children.remove(index)
+    }
+
     /// Calculates a node's filter bounding box.
     ///
     /// Filters with `objectBoundingBox` and missing or zero `bounding_box` would be ignored.
@@ -1286,7 +1478,9 @@ pub struct Path {
 }
 
 impl Path {
-    pub(crate) fn new_simple(data: Arc<tiny_skia_path::Path>) -> Option<Self> {
+    /// Creates a path with default styling and no transform, suitable
+    /// for clip paths, masks, and other simple path uses.
+    pub fn new_simple(data: Arc<tiny_skia_path::Path>) -> Option<Self> {
         Self::new(
             String::new(),
             true,
@@ -1299,7 +1493,9 @@ impl Path {
         )
     }
 
-    pub(crate) fn new(
+    /// Creates a new `Path` with the given properties.
+    /// Computes bounding boxes automatically from the path data and transform.
+    pub fn new(
         id: String,
         visible: bool,
         fill: Option<Fill>,
@@ -1342,6 +1538,85 @@ impl Path {
             stroke_bounding_box,
             abs_stroke_bounding_box,
         })
+    }
+
+    /// Creates a `Path` from an SVG `d` attribute string.
+    ///
+    /// Returns `None` if the path data is empty or invalid.
+    pub fn from_d(
+        d: &str,
+        fill: Option<Fill>,
+        stroke: Option<Stroke>,
+        abs_transform: Transform,
+    ) -> Option<Self> {
+        let data = Arc::new(Self::parse_d(d)?);
+        Self::new(
+            String::new(), true, fill, stroke,
+            PaintOrder::default(), ShapeRendering::default(),
+            data, abs_transform,
+        )
+    }
+
+    /// Creates a `Path` from an SVG `points` attribute string.
+    ///
+    /// Set `close` to `true` for polygons, `false` for polylines.
+    /// Returns `None` if the points string is empty or has fewer than 2 points.
+    pub fn from_points(
+        points: &str,
+        close: bool,
+        fill: Option<Fill>,
+        stroke: Option<Stroke>,
+        abs_transform: Transform,
+    ) -> Option<Self> {
+        let data = Arc::new(Self::parse_points(points, close)?);
+        Self::new(
+            String::new(), true, fill, stroke,
+            PaintOrder::default(), ShapeRendering::default(),
+            data, abs_transform,
+        )
+    }
+
+    /// Parse an SVG `d` attribute string into a tiny-skia Path.
+    fn parse_d(d: &str) -> Option<tiny_skia_path::Path> {
+        let mut builder = tiny_skia_path::PathBuilder::new();
+        for segment in svgtypes::SimplifyingPathParser::from(d) {
+            let seg = match segment {
+                Ok(v) => v,
+                Err(_) => break,
+            };
+            match seg {
+                svgtypes::SimplePathSegment::MoveTo { x, y } =>
+                    builder.move_to(x as f32, y as f32),
+                svgtypes::SimplePathSegment::LineTo { x, y } =>
+                    builder.line_to(x as f32, y as f32),
+                svgtypes::SimplePathSegment::Quadratic { x1, y1, x, y } =>
+                    builder.quad_to(x1 as f32, y1 as f32, x as f32, y as f32),
+                svgtypes::SimplePathSegment::CurveTo { x1, y1, x2, y2, x, y } =>
+                    builder.cubic_to(x1 as f32, y1 as f32, x2 as f32, y2 as f32, x as f32, y as f32),
+                svgtypes::SimplePathSegment::ClosePath => builder.close(),
+            }
+        }
+        builder.finish()
+    }
+
+    /// Parse an SVG `points` attribute string into a tiny-skia Path.
+    fn parse_points(points: &str, close: bool) -> Option<tiny_skia_path::Path> {
+        use svgtypes::PointsParser;
+        let mut builder = tiny_skia_path::PathBuilder::new();
+        for (x, y) in PointsParser::from(points) {
+            if builder.is_empty() {
+                builder.move_to(x as f32, y as f32);
+            } else {
+                builder.line_to(x as f32, y as f32);
+            }
+        }
+        if builder.len() < 2 {
+            return None;
+        }
+        if close {
+            builder.close();
+        }
+        builder.finish()
     }
 
     /// Element's ID.
@@ -1595,6 +1870,52 @@ pub struct Tree {
 }
 
 impl Tree {
+    /// Creates a new `Tree` with the given size and root group.
+    pub fn new(size: Size, root: Group) -> Self {
+        Tree {
+            size,
+            root,
+            linear_gradients: Vec::new(),
+            radial_gradients: Vec::new(),
+            patterns: Vec::new(),
+            clip_paths: Vec::new(),
+            masks: Vec::new(),
+            filters: Vec::new(),
+            #[cfg(feature = "text")]
+            fontdb: Arc::new(fontdb::Database::new()),
+        }
+    }
+
+    /// Adds a linear gradient definition to the tree.
+    pub fn push_linear_gradient(&mut self, g: Arc<LinearGradient>) {
+        self.linear_gradients.push(g);
+    }
+
+    /// Adds a radial gradient definition to the tree.
+    pub fn push_radial_gradient(&mut self, g: Arc<RadialGradient>) {
+        self.radial_gradients.push(g);
+    }
+
+    /// Adds a pattern definition to the tree.
+    pub fn push_pattern(&mut self, p: Arc<Pattern>) {
+        self.patterns.push(p);
+    }
+
+    /// Adds a clip path definition to the tree.
+    pub fn push_clip_path(&mut self, c: Arc<ClipPath>) {
+        self.clip_paths.push(c);
+    }
+
+    /// Adds a mask definition to the tree.
+    pub fn push_mask(&mut self, m: Arc<Mask>) {
+        self.masks.push(m);
+    }
+
+    /// Adds a filter definition to the tree.
+    pub fn push_filter(&mut self, f: Arc<filter::Filter>) {
+        self.filters.push(f);
+    }
+
     /// Image size.
     ///
     /// Size of an image that should be created to fit the SVG.
@@ -1756,6 +2077,11 @@ fn loop_over_paint_servers(parent: &Group, f: &mut dyn FnMut(&Paint)) {
             Node::Path(path) => {
                 push(path.fill.as_ref().map(|f| &f.paint), f);
                 push(path.stroke.as_ref().map(|f| &f.paint), f);
+            }
+            #[cfg(feature = "shape-preservation")]
+            Node::SimpleShape(shape) => {
+                push(shape.fill.as_ref().map(|f| &f.paint), f);
+                push(shape.stroke.as_ref().map(|f| &f.paint), f);
             }
             Node::Image(_) => {}
             // Flattened text would be used instead.
