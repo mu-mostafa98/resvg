@@ -653,7 +653,6 @@ fn node_to_user_coordinates(
                 cache,
             );
         }
-        #[cfg(feature = "shape-preservation")]
         Node::SimpleShape(_) => {},
         Node::Image(image) => {
             if let ImageKind::SVG(tree) = &mut image.kind {

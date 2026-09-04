@@ -196,7 +196,7 @@ impl GlyphCluster {
     }
 }
 
-pub(crate) fn layout_text(
+pub fn layout_text(
     text_node: &Text,
     resolver: &FontResolver,
     fontdb: &mut Arc<fontdb::Database>,
@@ -554,7 +554,9 @@ fn resolve_clusters_positions_horizontal(
 
     for cluster in clusters {
         let cp = offset + cluster.byte_idx.code_point_at(&chunk.text);
-        if let (Some(dx), Some(dy)) = (text.dx.get(cp), text.dy.get(cp)) {
+        let dx = text.dx.get(cp).cloned().unwrap_or(0.0);
+        let dy = text.dy.get(cp).cloned().unwrap_or(0.0);
+        if !dx.approx_zero_ulps(4) || !dy.approx_zero_ulps(4) {
             if writing_mode == WritingMode::LeftToRight {
                 x += dx;
                 y += dy;
@@ -562,16 +564,18 @@ fn resolve_clusters_positions_horizontal(
                 y -= dx;
                 x += dy;
             }
-            cluster.has_relative_shift = !dx.approx_zero_ulps(4) || !dy.approx_zero_ulps(4);
+            cluster.has_relative_shift = true;
         }
 
         cluster.transform = cluster.transform.pre_translate(x, y);
 
-        if let Some(angle) = text.rotate.get(cp).cloned() {
-            if !angle.approx_zero_ulps(4) {
-                cluster.transform = cluster.transform.pre_rotate(angle);
-                cluster.has_relative_shift = true;
-            }
+        let angle = text.rotate.get(cp)
+            .or_else(|| text.rotate.last())
+            .cloned()
+            .unwrap_or(0.0);
+        if !angle.approx_zero_ulps(4) {
+            cluster.transform = cluster.transform.pre_rotate(angle);
+            cluster.has_relative_shift = true;
         }
 
         x += cluster.advance;
@@ -691,10 +695,12 @@ fn resolve_clusters_positions_path(
                 .pre_translate(shift.x as f32, shift.y as f32);
         }
 
-        if let Some(angle) = text.rotate.get(cp).cloned() {
-            if !angle.approx_zero_ulps(4) {
-                cluster.transform = cluster.transform.pre_rotate(angle);
-            }
+        let angle = text.rotate.get(cp)
+            .or_else(|| text.rotate.last())
+            .cloned()
+            .unwrap_or(0.0);
+        if !angle.approx_zero_ulps(4) {
+            cluster.transform = cluster.transform.pre_rotate(angle);
         }
 
         // The possible `lengthAdjust` transform should be applied after text-on-path positioning.

@@ -301,6 +301,7 @@ fn collect_text_chunks_impl(
             word_spacing: parent.resolve_length(AId::WordSpacing, state, 0.0),
             text_length,
             length_adjust: parent.find_attribute(AId::LengthAdjust).unwrap_or_default(),
+            font_handle: None,
         };
 
         let mut is_new_span = true;

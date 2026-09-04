@@ -59,8 +59,5 @@ text = ["fontdb", "rustybuzz", "ttf-parser", "unicode-bidi", "unicode-script", "
 system-fonts = ["fontdb/fs", "fontdb/fontconfig"]
 # Enables font files memmaping for faster loading.
 memmap-fonts = ["fontdb/memmap"]
-# Preserves simple shapes (rect, circle, ellipse, line) as typed nodes
-# instead of converting them to paths. Useful for GPU-native rendering terminals.
-shape-preservation = []
 # Enables converting trees back to SVG.
 writer = ["xmlwriter", "base64"]

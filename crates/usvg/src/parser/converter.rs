@@ -94,7 +94,7 @@ macro_rules! font_lookup {
 }
 
 impl Cache {
-    pub(crate) fn new(#[cfg(feature = "text")] fontdb: Arc<Database>) -> Self {
+    pub fn new(#[cfg(feature = "text")] fontdb: Arc<Database>) -> Self {
         Self {
             #[cfg(feature = "text")]
             fontdb,

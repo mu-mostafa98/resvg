@@ -842,7 +842,6 @@ fn convert_image_inner(
                     match child2 {
                         Node::Group(g2) => g2.id.clear(),
                         Node::Path(path) => path.id.clear(),
-                        #[cfg(feature = "shape-preservation")]
                         Node::SimpleShape(_) => {},
                         Node::Image(image) => image.id.clear(),
                         Node::Text(text) => text.id.clear(),

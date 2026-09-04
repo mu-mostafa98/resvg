@@ -66,9 +66,15 @@ impl NonZeroF32 {
     }
 }
 
+/// Gradient or pattern coordinate system.
+///
+/// Determines whether gradient/pattern coordinates are relative to
+/// the object's bounding box or the user coordinate system.
 #[derive(Clone, Copy, PartialEq, Debug)]
-pub(crate) enum Units {
+pub enum Units {
+    /// Coordinates are in the user coordinate system.
     UserSpaceOnUse,
+    /// Coordinates are relative to the object's bounding box (0..1 range).
     ObjectBoundingBox,
 }
 
@@ -303,6 +309,13 @@ impl BaseGradient {
         self.spread_method
     }
 
+    /// Gradient units.
+    ///
+    /// `gradientUnits` in SVG.
+    pub fn units(&self) -> Units {
+        self.units
+    }
+
     /// A list of `stop` elements.
     pub fn stops(&self) -> &[Stop] {
         &self.stops
@@ -322,6 +335,31 @@ pub struct LinearGradient {
 }
 
 impl LinearGradient {
+    /// Creates a new `LinearGradient`.
+    #[inline]
+    pub fn new(
+        id: &str,
+        units: Units,
+        transform: Transform,
+        spread_method: SpreadMethod,
+        stops: Vec<Stop>,
+        x1: f32,
+        y1: f32,
+        x2: f32,
+        y2: f32,
+    ) -> Option<Self> {
+        Some(LinearGradient {
+            x1, y1, x2, y2,
+            base: BaseGradient {
+                id: NonEmptyString::new(id.to_string())?,
+                units,
+                transform,
+                spread_method,
+                stops,
+            },
+        })
+    }
+
     /// `x1` coordinate.
     pub fn x1(&self) -> f32 {
         self.x1
@@ -366,6 +404,35 @@ pub struct RadialGradient {
 }
 
 impl RadialGradient {
+    /// Creates a new `RadialGradient`.
+    #[inline]
+    pub fn new(
+        id: &str,
+        units: Units,
+        transform: Transform,
+        spread_method: SpreadMethod,
+        stops: Vec<Stop>,
+        cx: f32,
+        cy: f32,
+        r: f32,
+        fx: f32,
+        fy: f32,
+        fr: f32,
+    ) -> Option<Self> {
+        Some(RadialGradient {
+            cx, cy, fx, fy,
+            r: PositiveF32::new(r)?,
+            fr: PositiveF32::new(fr.max(0.0))?,
+            base: BaseGradient {
+                id: NonEmptyString::new(id.to_string())?,
+                units,
+                transform,
+                spread_method,
+                stops,
+            },
+        })
+    }
+
     /// `cx` coordinate.
     pub fn cx(&self) -> f32 {
         self.cx
@@ -419,6 +486,16 @@ pub struct Stop {
 }
 
 impl Stop {
+    /// Creates a new gradient `Stop`.
+    #[inline]
+    pub fn new(offset: f32, color: Color, opacity: f32) -> Option<Self> {
+        Some(Stop {
+            offset: StopOffset::new(offset)?,
+            color,
+            opacity: Opacity::new(opacity)?,
+        })
+    }
+
     /// Gradient stop offset.
     ///
     /// `offset` in SVG.
@@ -912,7 +989,6 @@ impl Mask {
 }
 
 /// A simple shape kind — preserves geometry type for GPU-native rendering.
-#[cfg(feature = "shape-preservation")]
 #[allow(missing_docs)]
 #[derive(Clone, Copy, Debug)]
 pub enum SimpleShapeKind {
@@ -948,7 +1024,6 @@ pub enum SimpleShapeKind {
 /// GPU-clip rendering terminals.
 ///
 /// `rect`, `circle`, `ellipse`, `line` elements in SVG.
-#[cfg(feature = "shape-preservation")]
 #[derive(Clone, Debug)]
 pub struct SimpleShape {
     pub(crate) id: String,
@@ -963,7 +1038,6 @@ pub struct SimpleShape {
     pub(crate) abs_bounding_box: Rect,
 }
 
-#[cfg(feature = "shape-preservation")]
 impl SimpleShape {
     /// Creates a new `SimpleShape` from the given geometry kind.
     pub fn new(
@@ -1032,7 +1106,6 @@ impl SimpleShape {
     pub fn abs_bounding_box(&self) -> Rect { self.abs_bounding_box }
 }
 
-#[cfg(feature = "shape-preservation")]
 impl SimpleShapeKind {
     fn bounding_box(&self) -> Rect {
         match self {
@@ -1056,7 +1129,6 @@ impl SimpleShapeKind {
 pub enum Node {
     Group(Box<Group>),
     Path(Box<Path>),
-    #[cfg(feature = "shape-preservation")]
     SimpleShape(Box<SimpleShape>),
     Image(Box<Image>),
     Text(Box<Text>),
@@ -1068,7 +1140,6 @@ impl Node {
         match self {
             Node::Group(e) => e.id.as_str(),
             Node::Path(e) => e.id.as_str(),
-            #[cfg(feature = "shape-preservation")]
             Node::SimpleShape(e) => e.id(),
             Node::Image(e) => e.id.as_str(),
             Node::Text(e) => e.id.as_str(),
@@ -1082,7 +1153,6 @@ impl Node {
         match self {
             Node::Group(group) => group.abs_transform(),
             Node::Path(path) => path.abs_transform(),
-            #[cfg(feature = "shape-preservation")]
             Node::SimpleShape(shape) => shape.abs_transform(),
             Node::Image(image) => image.abs_transform(),
             Node::Text(text) => text.abs_transform(),
@@ -1094,7 +1164,6 @@ impl Node {
         match self {
             Node::Group(group) => group.bounding_box(),
             Node::Path(path) => path.bounding_box(),
-            #[cfg(feature = "shape-preservation")]
             Node::SimpleShape(shape) => shape.bounding_box(),
             Node::Image(image) => image.bounding_box(),
             Node::Text(text) => text.bounding_box(),
@@ -1106,7 +1175,6 @@ impl Node {
         match self {
             Node::Group(group) => group.abs_bounding_box(),
             Node::Path(path) => path.abs_bounding_box(),
-            #[cfg(feature = "shape-preservation")]
             Node::SimpleShape(shape) => shape.abs_bounding_box(),
             Node::Image(image) => image.abs_bounding_box(),
             Node::Text(text) => text.abs_bounding_box(),
@@ -1118,7 +1186,6 @@ impl Node {
         match self {
             Node::Group(group) => group.stroke_bounding_box(),
             Node::Path(path) => path.stroke_bounding_box(),
-            #[cfg(feature = "shape-preservation")]
             Node::SimpleShape(shape) => shape.bounding_box(),
             // Image cannot be stroked.
             Node::Image(image) => image.bounding_box(),
@@ -1131,7 +1198,6 @@ impl Node {
         match self {
             Node::Group(group) => group.abs_stroke_bounding_box(),
             Node::Path(path) => path.abs_stroke_bounding_box(),
-            #[cfg(feature = "shape-preservation")]
             Node::SimpleShape(shape) => shape.abs_bounding_box(),
             // Image cannot be stroked.
             Node::Image(image) => image.abs_bounding_box(),
@@ -1150,7 +1216,6 @@ impl Node {
             Node::Group(group) => Some(group.abs_layer_bounding_box()),
             // Hor/ver path without stroke can return None. This is expected.
             Node::Path(path) => path.abs_bounding_box().to_non_zero_rect(),
-            #[cfg(feature = "shape-preservation")]
             Node::SimpleShape(shape) => shape.abs_bounding_box().to_non_zero_rect(),
             Node::Image(image) => image.abs_bounding_box().to_non_zero_rect(),
             Node::Text(text) => text.abs_bounding_box().to_non_zero_rect(),
@@ -1185,7 +1250,6 @@ impl Node {
         match self {
             Node::Group(group) => group.subroots(&mut f),
             Node::Path(path) => path.subroots(&mut f),
-            #[cfg(feature = "shape-preservation")]
             Node::SimpleShape(_) => {},
             Node::Image(image) => image.subroots(&mut f),
             Node::Text(text) => text.subroots(&mut f),
@@ -1282,6 +1346,11 @@ impl Group {
     /// it with a parent group using the specified opacity.
     pub fn opacity(&self) -> Opacity {
         self.opacity
+    }
+
+    /// Set the group opacity.
+    pub fn set_opacity(&mut self, opacity: Opacity) {
+        self.opacity = opacity;
     }
 
     /// Group blend mode.
@@ -1788,6 +1857,18 @@ pub struct Image {
 }
 
 impl Image {
+    /// Creates a new `Image` with the given size and image kind.
+    pub fn new(
+        id: String, visible: bool, size: Size,
+        rendering_mode: ImageRendering, kind: ImageKind,
+        abs_transform: Transform,
+    ) -> Option<Self> {
+        let abs_bounding_box = size.to_rect(0.0, 0.0)?
+            .transform(abs_transform)?
+            .to_non_zero_rect()?;
+        Some(Image { id, visible, size, rendering_mode, kind, abs_transform, abs_bounding_box })
+    }
+
     /// Element's ID.
     ///
     /// Taken from the SVG itself.
@@ -1992,6 +2073,12 @@ impl Tree {
         &self.fontdb
     }
 
+    /// Sets the font database for this tree.
+    #[cfg(feature = "text")]
+    pub fn set_fontdb(&mut self, fontdb: Arc<fontdb::Database>) {
+        self.fontdb = fontdb;
+    }
+
     pub(crate) fn collect_paint_servers(&mut self) {
         loop_over_paint_servers(&self.root, &mut |paint| match paint {
             Paint::Color(_) => {}
@@ -2078,7 +2165,6 @@ fn loop_over_paint_servers(parent: &Group, f: &mut dyn FnMut(&Paint)) {
                 push(path.fill.as_ref().map(|f| &f.paint), f);
                 push(path.stroke.as_ref().map(|f| &f.paint), f);
             }
-            #[cfg(feature = "shape-preservation")]
             Node::SimpleShape(shape) => {
                 push(shape.fill.as_ref().map(|f| &f.paint), f);
                 push(shape.stroke.as_ref().map(|f| &f.paint), f);

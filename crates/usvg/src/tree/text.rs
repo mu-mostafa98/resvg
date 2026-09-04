@@ -8,7 +8,7 @@ pub use svgtypes::FontFamily;
 
 #[cfg(feature = "text")]
 use crate::layout::Span;
-use crate::{Fill, Group, NonEmptyString, PaintOrder, Rect, Stroke, TextRendering, Transform};
+use crate::{Fill, Group, NonEmptyString, NonZeroRect, PaintOrder, Rect, Stroke, TextRendering, Transform};
 
 /// A font stretch property.
 #[allow(missing_docs)]
@@ -150,6 +150,30 @@ pub struct Font {
 }
 
 impl Font {
+    /// Creates a new `Font` with the given properties.
+    #[inline]
+    pub fn new(
+        families: Vec<FontFamily>, style: FontStyle,
+        stretch: FontStretch, weight: u16,
+    ) -> Self {
+        Font { families, style, stretch, weight, variations: Vec::new() }
+    }
+
+    /// Creates a `Font` from string-based attributes, parsing the font-family
+    /// string using standard SVG rules. Falls back to sans-serif if parsing fails.
+    #[inline]
+    pub fn from_attrs(family_str: &str, weight: u16, style: FontStyle) -> Self {
+        let families = svgtypes::parse_font_families(family_str)
+            .unwrap_or_else(|_| vec![FontFamily::SansSerif]);
+        Font {
+            families,
+            style,
+            stretch: FontStretch::Normal,
+            weight,
+            variations: Vec::new(),
+        }
+    }
+
     /// A list of family names.
     ///
     /// Never empty. Uses `usvg::Options::font_family` as fallback.
@@ -288,6 +312,11 @@ pub struct TextDecorationStyle {
 }
 
 impl TextDecorationStyle {
+    /// Creates a new text decoration style.
+    pub fn new(fill: Option<Fill>, stroke: Option<Stroke>) -> Self {
+        TextDecorationStyle { fill, stroke }
+    }
+
     /// A fill style.
     pub fn fill(&self) -> Option<&Fill> {
         self.fill.as_ref()
@@ -308,6 +337,15 @@ pub struct TextDecoration {
 }
 
 impl TextDecoration {
+    /// Creates a new text decoration.
+    pub fn new(
+        underline: Option<TextDecorationStyle>,
+        overline: Option<TextDecorationStyle>,
+        line_through: Option<TextDecorationStyle>,
+    ) -> Self {
+        TextDecoration { underline, overline, line_through }
+    }
+
     /// An optional underline and its style.
     pub fn underline(&self) -> Option<&TextDecorationStyle> {
         self.underline.as_ref()
@@ -348,9 +386,55 @@ pub struct TextSpan {
     pub(crate) word_spacing: f32,
     pub(crate) text_length: Option<f32>,
     pub(crate) length_adjust: LengthAdjust,
+    /// Opaque handle to a backend-specific font instance (e.g. a WebRender
+    /// `FontInstanceKey`) resolved by the integration layer at construction
+    /// time. usvg itself does not know what the handle refers to — it is
+    /// only ever interpreted by a renderer that has access to the matching
+    /// font registry. `None` means no native font was resolved and the
+    /// renderer should fall back to path-based text rendering.
+    pub(crate) font_handle: Option<usize>,
 }
 
 impl TextSpan {
+    /// Creates a new `TextSpan` with the given text range and style.
+    #[inline]
+    pub fn new(
+        start: usize, end: usize,
+        fill: Option<Fill>, stroke: Option<Stroke>,
+        font: Font, font_size: f32,
+    ) -> Option<Self> {
+        Some(TextSpan {
+            start, end, fill, stroke,
+            paint_order: PaintOrder::default(),
+            font,
+            font_size: NonZeroPositiveF32::new(font_size)?,
+            small_caps: false, apply_kerning: true,
+            font_optical_sizing: FontOpticalSizing::default(),
+            decoration: TextDecoration { underline: None, overline: None, line_through: None },
+            dominant_baseline: DominantBaseline::default(),
+            alignment_baseline: AlignmentBaseline::default(),
+            baseline_shift: Vec::new(),
+            visible: true,
+            letter_spacing: 0.0, word_spacing: 0.0,
+            text_length: None, length_adjust: LengthAdjust::default(),
+            font_handle: None,
+        })
+    }
+
+    /// Returns the opaque font handle assigned by the integration layer, if any.
+    ///
+    /// See the field-level docs on [`TextSpan::font_handle`].
+    pub fn font_handle(&self) -> Option<usize> {
+        self.font_handle
+    }
+
+    /// Assigns the opaque font handle resolved by the integration layer.
+    ///
+    /// See the field-level docs on [`TextSpan::font_handle`].
+    pub fn set_font_handle(&mut self, handle: usize) {
+        self.font_handle = Some(handle);
+    }
+
     /// A span start in bytes.
     ///
     /// Offset is relative to the parent text chunk and not the parent text element.
@@ -418,6 +502,11 @@ impl TextSpan {
         &self.decoration
     }
 
+    /// Set the text decoration.
+    pub fn set_decoration(&mut self, decoration: TextDecoration) {
+        self.decoration = decoration;
+    }
+
     /// A span dominant baseline.
     pub fn dominant_baseline(&self) -> DominantBaseline {
         self.dominant_baseline
@@ -445,9 +534,19 @@ impl TextSpan {
         self.letter_spacing
     }
 
+    /// Set letter spacing.
+    pub fn set_letter_spacing(&mut self, spacing: f32) {
+        self.letter_spacing = spacing;
+    }
+
     /// A word spacing property.
     pub fn word_spacing(&self) -> f32 {
         self.word_spacing
+    }
+
+    /// Set word spacing.
+    pub fn set_word_spacing(&mut self, spacing: f32) {
+        self.word_spacing = spacing;
     }
 
     /// A text length property.
@@ -485,6 +584,16 @@ pub struct TextPath {
 }
 
 impl TextPath {
+    /// Creates a new `TextPath`.
+    #[inline]
+    pub fn new(id: &str, start_offset: f32, path: Arc<tiny_skia_path::Path>) -> Option<Self> {
+        Some(TextPath {
+            id: NonEmptyString::new(id.to_string())?,
+            start_offset,
+            path,
+        })
+    }
+
     /// Element's ID.
     ///
     /// Taken from the SVG itself.
@@ -530,6 +639,20 @@ pub struct TextChunk {
 }
 
 impl TextChunk {
+    /// Creates a new `TextChunk` with linear text flow.
+    #[inline]
+    pub fn new(
+        x: f32, y: f32, anchor: TextAnchor,
+        spans: Vec<TextSpan>, text: String,
+    ) -> Self {
+        TextChunk {
+            x: Some(x), y: Some(y),
+            anchor, spans,
+            text_flow: TextFlow::Linear,
+            text,
+        }
+    }
+
     /// An absolute X axis offset.
     pub fn x(&self) -> Option<f32> {
         self.x
@@ -553,6 +676,11 @@ impl TextChunk {
     /// A text chunk flow.
     pub fn text_flow(&self) -> TextFlow {
         self.text_flow.clone()
+    }
+
+    /// Set this chunk to flow along a text path.
+    pub fn set_text_path(&mut self, text_path: TextPath) {
+        self.text_flow = TextFlow::Path(std::sync::Arc::new(text_path));
     }
 
     /// A text chunk actual text.
@@ -592,6 +720,77 @@ pub struct Text {
 }
 
 impl Text {
+    /// Creates a new `Text` with a single text chunk.
+    pub fn with_chunk(
+        id: String, rendering_mode: TextRendering, abs_transform: Transform,
+        x: f32, y: f32, text: String, fill: Option<Fill>,
+    ) -> Self {
+        let span = TextSpan {
+            start: 0, end: text.len(),
+            fill, stroke: None,
+            paint_order: PaintOrder::default(),
+            font: Font {
+                families: vec![FontFamily::SansSerif],
+                style: FontStyle::Normal,
+                stretch: FontStretch::Normal,
+                weight: 400,
+                variations: Vec::new(),
+            },
+            font_size: NonZeroPositiveF32::new(16.0).unwrap(),
+            small_caps: false, apply_kerning: true,
+            font_optical_sizing: FontOpticalSizing::default(),
+            decoration: TextDecoration { underline: None, overline: None, line_through: None },
+            dominant_baseline: DominantBaseline::default(),
+            alignment_baseline: AlignmentBaseline::default(),
+            baseline_shift: Vec::new(),
+            visible: true,
+            letter_spacing: 0.0, word_spacing: 0.0,
+            text_length: None, length_adjust: LengthAdjust::default(),
+            font_handle: None,
+        };
+        let chunk = TextChunk {
+            x: Some(x), y: Some(y),
+            anchor: TextAnchor::Start,
+            spans: vec![span],
+            text_flow: TextFlow::Linear,
+            text,
+        };
+        let dummy = Rect::from_xywh(0.0, 0.0, 0.0, 0.0).unwrap();
+        Text {
+            id, rendering_mode, abs_transform,
+            dx: Vec::new(), dy: Vec::new(), rotate: Vec::new(),
+            writing_mode: WritingMode::LeftToRight,
+            chunks: vec![chunk],
+            bounding_box: dummy, abs_bounding_box: dummy,
+            stroke_bounding_box: dummy, abs_stroke_bounding_box: dummy,
+            flattened: Box::new(Group::empty()),
+            #[cfg(feature = "text")]
+            layouted: Vec::new(),
+        }
+    }
+
+    /// Creates a new empty `Text` node.
+    pub fn new(id: String, rendering_mode: TextRendering, abs_transform: Transform) -> Self {
+        let dummy = Rect::from_xywh(0.0, 0.0, 0.0, 0.0).unwrap();
+        Text {
+            id,
+            rendering_mode,
+            dx: Vec::new(),
+            dy: Vec::new(),
+            rotate: Vec::new(),
+            writing_mode: WritingMode::LeftToRight,
+            chunks: Vec::new(),
+            abs_transform,
+            bounding_box: dummy,
+            abs_bounding_box: dummy,
+            stroke_bounding_box: dummy,
+            abs_stroke_bounding_box: dummy,
+            flattened: Box::new(Group::empty()),
+            #[cfg(feature = "text")]
+            layouted: Vec::new(),
+        }
+    }
+
     /// Element's ID.
     ///
     /// Taken from the SVG itself.
@@ -615,6 +814,11 @@ impl Text {
         &self.dx
     }
 
+    /// Set the relative X axis offsets (one per codepoint).
+    pub fn set_dx(&mut self, dx: Vec<f32>) {
+        self.dx = dx;
+    }
+
     /// A relative Y axis offsets.
     ///
     /// One offset for each Unicode codepoint. Aka `char` in Rust.
@@ -622,11 +826,21 @@ impl Text {
         &self.dy
     }
 
+    /// Set the relative Y axis offsets (one per codepoint).
+    pub fn set_dy(&mut self, dy: Vec<f32>) {
+        self.dy = dy;
+    }
+
     /// A list of rotation angles.
     ///
     /// One angle for each Unicode codepoint. Aka `char` in Rust.
     pub fn rotate(&self) -> &[f32] {
         &self.rotate
+    }
+
+    /// Set the rotation angles (one per codepoint).
+    pub fn set_rotate(&mut self, rotate: Vec<f32>) {
+        self.rotate = rotate;
     }
 
     /// A writing mode.
@@ -713,6 +927,21 @@ impl Text {
     #[cfg(feature = "text")]
     pub fn layouted(&self) -> &[Span] {
         &self.layouted
+    }
+
+    /// Add a text chunk to this text element.
+    pub fn push_chunk(&mut self, chunk: TextChunk) {
+        self.chunks.push(chunk);
+    }
+
+    /// Store the result of [`layout_text`] on this text node.
+    #[cfg(feature = "text")]
+    pub fn apply_layout(&mut self, spans: Vec<Span>, bbox: NonZeroRect) {
+        self.bounding_box = bbox.to_rect();
+        self.abs_bounding_box = bbox.transform(self.abs_transform)
+            .map(|r| r.to_rect())
+            .unwrap_or_else(|| bbox.to_rect());
+        self.layouted = spans;
     }
 
     pub(crate) fn subroots(&self, f: &mut dyn FnMut(&Group)) {
