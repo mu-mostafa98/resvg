@@ -20,12 +20,15 @@ use crate::OptionLog;
 /// An alias to `NormalizedF32`.
 pub type Opacity = NormalizedF32;
 
-// Must not be clone-able to preserve ID uniqueness.
+/// A non-empty string used as an element ID.
+///
+/// Must not be clone-able to preserve ID uniqueness.
 #[derive(Debug)]
-pub(crate) struct NonEmptyString(String);
+pub struct NonEmptyString(String);
 
 impl NonEmptyString {
-    pub(crate) fn new(string: String) -> Option<Self> {
+    /// Creates a new non-empty string, returning `None` when trimmed input is empty.
+    pub fn new(string: String) -> Option<Self> {
         if string.trim().is_empty() {
             return None;
         }
@@ -33,7 +36,8 @@ impl NonEmptyString {
         Some(NonEmptyString(string))
     }
 
-    pub(crate) fn get(&self) -> &str {
+    /// Returns the underlying string.
+    pub fn get(&self) -> &str {
         &self.0
     }
 
@@ -66,9 +70,12 @@ impl NonZeroF32 {
     }
 }
 
+/// Units of a paint server, pattern or clip/mask region.
 #[derive(Clone, Copy, PartialEq, Debug)]
-pub(crate) enum Units {
+pub enum Units {
+    /// Absolute units in the user coordinate system.
     UserSpaceOnUse,
+    /// Units relative to the object's bounding box.
     ObjectBoundingBox,
 }
 
@@ -88,7 +95,7 @@ impl std::fmt::Display for Units {
 /// `visibility` attribute in the SVG.
 #[allow(missing_docs)]
 #[derive(Clone, Copy, PartialEq, Debug)]
-pub(crate) enum Visibility {
+pub enum Visibility {
     Visible,
     Hidden,
     Collapse,
@@ -280,16 +287,34 @@ impl Default for SpreadMethod {
 }
 
 /// A generic gradient.
+#[allow(missing_docs)]
 #[derive(Debug)]
 pub struct BaseGradient {
-    pub(crate) id: NonEmptyString,
-    pub(crate) units: Units, // used only during parsing
-    pub(crate) transform: Transform,
-    pub(crate) spread_method: SpreadMethod,
-    pub(crate) stops: Vec<Stop>,
+    pub id: NonEmptyString,
+    pub units: Units,
+    pub transform: Transform,
+    pub spread_method: SpreadMethod,
+    pub stops: Vec<Stop>,
 }
 
 impl BaseGradient {
+    /// Creates a new base gradient.
+    pub fn new(
+        id: NonEmptyString,
+        units: Units,
+        transform: Transform,
+        spread_method: SpreadMethod,
+        stops: Vec<Stop>,
+    ) -> Self {
+        BaseGradient {
+            id,
+            units,
+            transform,
+            spread_method,
+            stops,
+        }
+    }
+
     /// Element's ID.
     ///
     /// Taken from the SVG itself.
@@ -321,16 +346,35 @@ impl BaseGradient {
 /// A linear gradient.
 ///
 /// `linearGradient` element in SVG.
+#[allow(missing_docs)]
 #[derive(Debug)]
 pub struct LinearGradient {
-    pub(crate) base: BaseGradient,
-    pub(crate) x1: f32,
-    pub(crate) y1: f32,
-    pub(crate) x2: f32,
-    pub(crate) y2: f32,
+    pub base: BaseGradient,
+    pub x1: f32,
+    pub y1: f32,
+    pub x2: f32,
+    pub y2: f32,
 }
 
 impl LinearGradient {
+    /// Creates a new linear gradient.
+    #[allow(clippy::too_many_arguments)]
+    pub fn new(
+        base: BaseGradient,
+        x1: f32,
+        y1: f32,
+        x2: f32,
+        y2: f32,
+    ) -> Self {
+        LinearGradient {
+            base,
+            x1,
+            y1,
+            x2,
+            y2,
+        }
+    }
+
     /// `x1` coordinate.
     pub fn x1(&self) -> f32 {
         self.x1
@@ -363,18 +407,41 @@ impl std::ops::Deref for LinearGradient {
 /// A radial gradient.
 ///
 /// `radialGradient` element in SVG.
+#[allow(missing_docs)]
 #[derive(Debug)]
 pub struct RadialGradient {
-    pub(crate) base: BaseGradient,
-    pub(crate) cx: f32,
-    pub(crate) cy: f32,
-    pub(crate) r: PositiveF32,
-    pub(crate) fx: f32,
-    pub(crate) fy: f32,
-    pub(crate) fr: PositiveF32,
+    pub base: BaseGradient,
+    pub cx: f32,
+    pub cy: f32,
+    pub r: PositiveF32,
+    pub fx: f32,
+    pub fy: f32,
+    pub fr: PositiveF32,
 }
 
 impl RadialGradient {
+    /// Creates a new radial gradient.
+    #[allow(clippy::too_many_arguments)]
+    pub fn new(
+        base: BaseGradient,
+        cx: f32,
+        cy: f32,
+        r: PositiveF32,
+        fx: f32,
+        fy: f32,
+        fr: PositiveF32,
+    ) -> Self {
+        RadialGradient {
+            base,
+            cx,
+            cy,
+            r,
+            fx,
+            fy,
+            fr,
+        }
+    }
+
     /// `cx` coordinate.
     pub fn cx(&self) -> f32 {
         self.cx
@@ -420,14 +487,24 @@ pub type StopOffset = NormalizedF32;
 /// Gradient's stop element.
 ///
 /// `stop` element in SVG.
+#[allow(missing_docs)]
 #[derive(Clone, Copy, Debug)]
 pub struct Stop {
-    pub(crate) offset: StopOffset,
-    pub(crate) color: Color,
-    pub(crate) opacity: Opacity,
+    pub offset: StopOffset,
+    pub color: Color,
+    pub opacity: Opacity,
 }
 
 impl Stop {
+    /// Creates a new gradient stop.
+    pub fn new(offset: StopOffset, color: Color, opacity: Opacity) -> Self {
+        Stop {
+            offset,
+            color,
+            opacity,
+        }
+    }
+
     /// Gradient stop offset.
     ///
     /// `offset` in SVG.
@@ -453,18 +530,40 @@ impl Stop {
 /// A pattern element.
 ///
 /// `pattern` element in SVG.
+#[allow(missing_docs)]
 #[derive(Debug)]
 pub struct Pattern {
-    pub(crate) id: NonEmptyString,
-    pub(crate) units: Units,         // used only during parsing
-    pub(crate) content_units: Units, // used only during parsing
-    pub(crate) transform: Transform,
-    pub(crate) rect: NonZeroRect,
-    pub(crate) view_box: Option<ViewBox>,
-    pub(crate) root: Group,
+    pub id: NonEmptyString,
+    pub units: Units,
+    pub content_units: Units,
+    pub transform: Transform,
+    pub rect: NonZeroRect,
+    pub view_box: Option<ViewBox>,
+    pub root: Group,
 }
 
 impl Pattern {
+    /// Creates a new pattern.
+    pub fn new(
+        id: NonEmptyString,
+        units: Units,
+        content_units: Units,
+        transform: Transform,
+        rect: NonZeroRect,
+        view_box: Option<ViewBox>,
+        root: Group,
+    ) -> Self {
+        Pattern {
+            id,
+            units,
+            content_units,
+            transform,
+            rect,
+            view_box,
+            root,
+        }
+    }
+
     /// Element's ID.
     ///
     /// Taken from the SVG itself.
@@ -578,22 +677,38 @@ impl Default for LineJoin {
 }
 
 /// A stroke style.
+#[allow(missing_docs)]
 #[derive(Clone, Debug)]
 pub struct Stroke {
-    pub(crate) paint: Paint,
-    pub(crate) dasharray: Option<Vec<f32>>,
-    pub(crate) dashoffset: f32,
-    pub(crate) miterlimit: StrokeMiterlimit,
-    pub(crate) opacity: Opacity,
-    pub(crate) width: StrokeWidth,
-    pub(crate) linecap: LineCap,
-    pub(crate) linejoin: LineJoin,
+    pub paint: Paint,
+    pub dasharray: Option<Vec<f32>>,
+    pub dashoffset: f32,
+    pub miterlimit: StrokeMiterlimit,
+    pub opacity: Opacity,
+    pub width: StrokeWidth,
+    pub linecap: LineCap,
+    pub linejoin: LineJoin,
     // Whether the current stroke needs to be resolved relative
     // to a context element.
-    pub(crate) context_element: Option<ContextElement>,
+    pub context_element: Option<ContextElement>,
 }
 
 impl Stroke {
+    /// Creates a new stroke with default options.
+    pub fn new(paint: Paint) -> Self {
+        Stroke {
+            paint,
+            dasharray: None,
+            dashoffset: 0.0,
+            miterlimit: StrokeMiterlimit::default(),
+            opacity: Opacity::ONE,
+            width: StrokeWidth::new(1.0).unwrap(),
+            linecap: LineCap::default(),
+            linejoin: LineJoin::default(),
+            context_element: None,
+        }
+    }
+
     /// Stroke paint.
     pub fn paint(&self) -> &Paint {
         &self.paint
@@ -679,8 +794,9 @@ impl Default for FillRule {
     }
 }
 
+/// The context element used to resolve a paint server's units.
 #[derive(Clone, Copy, Debug)]
-pub(crate) enum ContextElement {
+pub enum ContextElement {
     /// The current context element is a use node. Since we can get
     /// the bounding box of a use node only once we have converted
     /// all elements, we need to fix the transform and units of
@@ -694,17 +810,28 @@ pub(crate) enum ContextElement {
 }
 
 /// A fill style.
+#[allow(missing_docs)]
 #[derive(Clone, Debug)]
 pub struct Fill {
-    pub(crate) paint: Paint,
-    pub(crate) opacity: Opacity,
-    pub(crate) rule: FillRule,
+    pub paint: Paint,
+    pub opacity: Opacity,
+    pub rule: FillRule,
     // Whether the current fill needs to be resolved relative
     // to a context element.
-    pub(crate) context_element: Option<ContextElement>,
+    pub context_element: Option<ContextElement>,
 }
 
 impl Fill {
+    /// Creates a new fill with default options.
+    pub fn new(paint: Paint) -> Self {
+        Fill {
+            paint,
+            opacity: Opacity::ONE,
+            rule: FillRule::default(),
+            context_element: None,
+        }
+    }
+
     /// Fill paint.
     pub fn paint(&self) -> &Paint {
         &self.paint
@@ -789,21 +916,38 @@ impl PartialEq for Paint {
 /// A clip-path element.
 ///
 /// `clipPath` element in SVG.
+#[allow(missing_docs)]
 #[derive(Debug)]
 pub struct ClipPath {
-    pub(crate) id: NonEmptyString,
-    pub(crate) transform: Transform,
-    pub(crate) clip_path: Option<Arc<ClipPath>>,
-    pub(crate) root: Group,
+    pub id: NonEmptyString,
+    pub transform: Transform,
+    pub clip_path: Option<Arc<ClipPath>>,
+    pub root: Group,
 }
 
 impl ClipPath {
-    pub(crate) fn empty(id: NonEmptyString) -> Self {
+    /// Creates an empty clip path with the given ID.
+    pub fn empty(id: NonEmptyString) -> Self {
         ClipPath {
             id,
             transform: Transform::default(),
             clip_path: None,
             root: Group::empty(),
+        }
+    }
+
+    /// Creates a new clip path.
+    pub fn new(
+        id: NonEmptyString,
+        transform: Transform,
+        clip_path: Option<Arc<ClipPath>>,
+        root: Group,
+    ) -> Self {
+        ClipPath {
+            id,
+            transform,
+            clip_path,
+            root,
         }
     }
 
@@ -853,16 +997,34 @@ impl Default for MaskType {
 /// A mask element.
 ///
 /// `mask` element in SVG.
+#[allow(missing_docs)]
 #[derive(Debug)]
 pub struct Mask {
-    pub(crate) id: NonEmptyString,
-    pub(crate) rect: NonZeroRect,
-    pub(crate) kind: MaskType,
-    pub(crate) mask: Option<Arc<Mask>>,
-    pub(crate) root: Group,
+    pub id: NonEmptyString,
+    pub rect: NonZeroRect,
+    pub kind: MaskType,
+    pub mask: Option<Arc<Mask>>,
+    pub root: Group,
 }
 
 impl Mask {
+    /// Creates a new mask.
+    pub fn new(
+        id: NonEmptyString,
+        rect: NonZeroRect,
+        kind: MaskType,
+        mask: Option<Arc<Mask>>,
+        root: Group,
+    ) -> Self {
+        Mask {
+            id,
+            rect,
+            kind,
+            mask,
+            root,
+        }
+    }
+
     /// Element's ID.
     ///
     /// Taken from the SVG itself.
@@ -1031,30 +1193,32 @@ impl Node {
 /// Those that left is just an indicator that a new canvas should be created.
 ///
 /// `g` element in SVG.
+#[allow(missing_docs)]
 #[derive(Clone, Debug)]
 pub struct Group {
-    pub(crate) id: String,
-    pub(crate) transform: Transform,
-    pub(crate) abs_transform: Transform,
-    pub(crate) opacity: Opacity,
-    pub(crate) blend_mode: BlendMode,
-    pub(crate) isolate: bool,
-    pub(crate) clip_path: Option<Arc<ClipPath>>,
+    pub id: String,
+    pub transform: Transform,
+    pub abs_transform: Transform,
+    pub opacity: Opacity,
+    pub blend_mode: BlendMode,
+    pub isolate: bool,
+    pub clip_path: Option<Arc<ClipPath>>,
     /// Whether the group is a context element (i.e. a use node)
-    pub(crate) is_context_element: bool,
-    pub(crate) mask: Option<Arc<Mask>>,
-    pub(crate) filters: Vec<Arc<filter::Filter>>,
+    pub is_context_element: bool,
+    pub mask: Option<Arc<Mask>>,
+    pub filters: Vec<Arc<filter::Filter>>,
     pub(crate) bounding_box: Rect,
     pub(crate) abs_bounding_box: Rect,
     pub(crate) stroke_bounding_box: Rect,
     pub(crate) abs_stroke_bounding_box: Rect,
     pub(crate) layer_bounding_box: NonZeroRect,
     pub(crate) abs_layer_bounding_box: NonZeroRect,
-    pub(crate) children: Vec<Node>,
+    pub children: Vec<Node>,
 }
 
 impl Group {
-    pub(crate) fn empty() -> Self {
+    /// Creates an empty group.
+    pub fn empty() -> Self {
         let dummy = Rect::from_xywh(0.0, 0.0, 0.0, 0.0).unwrap();
         Group {
             id: String::new(),
@@ -1197,6 +1361,11 @@ impl Group {
         &self.children
     }
 
+    /// Appends a child node to this group.
+    pub fn push_child(&mut self, child: Node) {
+        self.children.push(child);
+    }
+
     /// Checks if this group should be isolated during rendering.
     pub fn should_isolate(&self) -> bool {
         self.isolate
@@ -1278,16 +1447,17 @@ impl Default for PaintOrder {
 }
 
 /// A path element.
+#[allow(missing_docs)]
 #[derive(Clone, Debug)]
 pub struct Path {
-    pub(crate) id: String,
-    pub(crate) visible: bool,
-    pub(crate) fill: Option<Fill>,
-    pub(crate) stroke: Option<Stroke>,
-    pub(crate) paint_order: PaintOrder,
-    pub(crate) rendering_mode: ShapeRendering,
-    pub(crate) data: Arc<tiny_skia_path::Path>,
-    pub(crate) abs_transform: Transform,
+    pub id: String,
+    pub visible: bool,
+    pub fill: Option<Fill>,
+    pub stroke: Option<Stroke>,
+    pub paint_order: PaintOrder,
+    pub rendering_mode: ShapeRendering,
+    pub data: Arc<tiny_skia_path::Path>,
+    pub abs_transform: Transform,
     pub(crate) bounding_box: Rect,
     pub(crate) abs_bounding_box: Rect,
     pub(crate) stroke_bounding_box: Rect,
@@ -1295,7 +1465,8 @@ pub struct Path {
 }
 
 impl Path {
-    pub(crate) fn new_simple(data: Arc<tiny_skia_path::Path>) -> Option<Self> {
+    /// Creates a new path from the given geometry with no style or transform.
+    pub fn new_simple(data: Arc<tiny_skia_path::Path>) -> Option<Self> {
         Self::new(
             String::new(),
             true,
@@ -1308,7 +1479,10 @@ impl Path {
         )
     }
 
-    pub(crate) fn new(
+    /// Creates a new path node.
+    ///
+    /// The bounding boxes are computed immediately from `data` and `abs_transform`.
+    pub fn new(
         id: String,
         visible: bool,
         fill: Option<Fill>,
@@ -1510,18 +1684,40 @@ impl std::fmt::Debug for ImageKind {
 /// A raster image element.
 ///
 /// `image` element in SVG.
+#[allow(missing_docs)]
 #[derive(Clone, Debug)]
 pub struct Image {
-    pub(crate) id: String,
-    pub(crate) visible: bool,
-    pub(crate) size: Size,
-    pub(crate) rendering_mode: ImageRendering,
-    pub(crate) kind: ImageKind,
-    pub(crate) abs_transform: Transform,
+    pub id: String,
+    pub visible: bool,
+    pub size: Size,
+    pub rendering_mode: ImageRendering,
+    pub kind: ImageKind,
+    pub abs_transform: Transform,
     pub(crate) abs_bounding_box: NonZeroRect,
 }
 
 impl Image {
+    /// Creates a new image node.
+    pub fn new(
+        id: String,
+        visible: bool,
+        size: Size,
+        rendering_mode: ImageRendering,
+        kind: ImageKind,
+        abs_transform: Transform,
+    ) -> Option<Self> {
+        let abs_bounding_box = size.to_non_zero_rect(0.0, 0.0).transform(abs_transform)?;
+        Some(Image {
+            id,
+            visible,
+            size,
+            rendering_mode,
+            kind,
+            abs_transform,
+            abs_bounding_box,
+        })
+    }
+
     /// Element's ID.
     ///
     /// Taken from the SVG itself.
@@ -1604,6 +1800,55 @@ pub struct Tree {
 }
 
 impl Tree {
+    /// Creates a new, empty tree with the given size and root group.
+    ///
+    /// After populating the tree, call [`Tree::finalize`] to compute
+    /// bounding boxes and collect paint servers.
+    pub fn new(size: Size, root: Group) -> Self {
+        Tree {
+            size,
+            root,
+            linear_gradients: Vec::new(),
+            radial_gradients: Vec::new(),
+            patterns: Vec::new(),
+            clip_paths: Vec::new(),
+            masks: Vec::new(),
+            filters: Vec::new(),
+            #[cfg(feature = "text")]
+            fontdb: Arc::new(fontdb::Database::new()),
+        }
+    }
+
+    /// Returns a mutable reference to the root group.
+    pub fn root_mut(&mut self) -> &mut Group {
+        &mut self.root
+    }
+
+    /// Finalizes the tree after programmatic construction.
+    ///
+    /// This recomputes all bounding boxes (bottom-up) and collects paint
+    /// servers, clip paths, masks and filters into the `Tree` storage.
+    ///
+    /// This is the counterpart of the post-parse processing that the XML
+    /// parser performs in `convert_doc`. It must be called once after the
+    /// tree has been assembled and before it is rendered.
+    pub fn finalize(&mut self) {
+        self.linear_gradients.clear();
+        self.radial_gradients.clear();
+        self.patterns.clear();
+        self.clip_paths.clear();
+        self.masks.clear();
+        self.filters.clear();
+
+        calculate_bounding_boxes_recursive(&mut self.root);
+        resolve_object_bounding_box(&mut self.root, &mut 0);
+        self.collect_paint_servers();
+        self.root.collect_clip_paths(&mut self.clip_paths);
+        self.root.collect_masks(&mut self.masks);
+        self.root.collect_filters(&mut self.filters);
+        self.root.calculate_bounding_boxes();
+    }
+
     /// Image size.
     ///
     /// Size of an image that should be created to fit the SVG.
@@ -1713,6 +1958,277 @@ impl Tree {
             }
         });
     }
+}
+
+fn calculate_bounding_boxes_recursive(group: &mut Group) {
+    for child in &mut group.children {
+        if let Node::Group(g) = child {
+            calculate_bounding_boxes_recursive(g);
+        }
+    }
+
+    // Mask and clip-path content is stored on the group (not as children) and
+    // also needs its bounding boxes computed: otherwise an isolated group inside
+    // them (e.g. a shape wrapped for `opacity < 1`) has no `layer_bounding_box`
+    // and is silently skipped at render time. The XML parser does the equivalent
+    // in `parser::mask::convert` / `parser::clippath::convert`.
+    if let Some(mask) = &mut group.mask {
+        if let Some(mask) = Arc::get_mut(mask) {
+            calculate_bounding_boxes_recursive(&mut mask.root);
+            if let Some(sub_mask) = &mut mask.mask {
+                if let Some(sub_mask) = Arc::get_mut(sub_mask) {
+                    calculate_bounding_boxes_recursive(&mut sub_mask.root);
+                }
+            }
+        }
+    }
+    if let Some(clip_path) = &mut group.clip_path {
+        if let Some(clip_path) = Arc::get_mut(clip_path) {
+            calculate_bounding_boxes_recursive(&mut clip_path.root);
+            if let Some(sub_clip) = &mut clip_path.clip_path {
+                if let Some(sub_clip) = Arc::get_mut(sub_clip) {
+                    calculate_bounding_boxes_recursive(&mut sub_clip.root);
+                }
+            }
+        }
+    }
+
+    group.calculate_bounding_boxes();
+}
+
+// When building a tree programmatically we don't know a shape's bounding box
+// until after its path data is set, so gradients/patterns are created preserving
+// their `objectBoundingBox` units and then rewritten to `userSpaceOnUse` here —
+// the same post-parse step the XML parser performs in
+// `parser::paint_server::update_paint_servers`. For rendering, paint servers are
+// always `userSpaceOnUse`.
+fn resolve_object_bounding_box(group: &mut Group, counter: &mut usize) {
+    for child in &mut group.children {
+        if let Node::Group(g) = child {
+            resolve_object_bounding_box(g, counter);
+        } else if let Node::Path(path) = child {
+            let bbox = path.bounding_box;
+            // A paint server with `objectBoundingBox` units on a zero-sized shape is
+            // dropped here, mirroring the parser's `to_user_coordinates` returning
+            // `None` and causing `process_fill`/`process_stroke` to clear the paint.
+            let keep_fill = match &mut path.fill {
+                Some(fill) => resolve_paint_units(&mut fill.paint, bbox, counter),
+                None => true,
+            };
+            if !keep_fill {
+                path.fill = None;
+            }
+            let keep_stroke = match &mut path.stroke {
+                Some(stroke) => resolve_paint_units(&mut stroke.paint, bbox, counter),
+                None => true,
+            };
+            if !keep_stroke {
+                path.stroke = None;
+            }
+        }
+    }
+
+    // Mask content can reference `objectBoundingBox` gradients/patterns just like
+    // regular shapes, so recurse into masks too (the XML parser's
+    // `update_paint_servers` does the same). Clip paths carry no paint servers, so
+    // they are intentionally left alone.
+    if let Some(mask) = &mut group.mask {
+        if let Some(mask) = Arc::get_mut(mask) {
+            resolve_object_bounding_box(&mut mask.root, counter);
+            if let Some(sub_mask) = &mut mask.mask {
+                if let Some(sub_mask) = Arc::get_mut(sub_mask) {
+                    resolve_object_bounding_box(&mut sub_mask.root, counter);
+                }
+            }
+        }
+    }
+}
+
+fn resolve_paint_units(paint: &mut Paint, bbox: Rect, counter: &mut usize) -> bool {
+    match paint {
+        Paint::LinearGradient(lg) => {
+            if lg.base.units != Units::ObjectBoundingBox {
+                return true;
+            }
+
+            // `objectBoundingBox` units on a zero-sized shape are meaningless, so
+            // drop the paint (matching the parser's `to_user_coordinates`).
+            let Some(non_zero_bbox) = bbox.to_non_zero_rect() else {
+                return false;
+            };
+
+            // `objectBoundingBox` maps the (0,0)-(1,1) square onto the shape's
+            // bbox, so the gradient transform becomes the original transform
+            // followed by the bbox scale/translate.
+            let transform = lg
+                .base
+                .transform
+                .post_concat(Transform::from_bbox(non_zero_bbox));
+
+            match Arc::get_mut(lg) {
+                Some(lg) => {
+                    lg.base.transform = transform;
+                    lg.base.units = Units::UserSpaceOnUse;
+                }
+                None => {
+                    // The gradient is shared by more than one shape (whose bboxes
+                    // differ), so clone it with a fresh id and resolved transform.
+                    *counter += 1;
+                    let id = NonEmptyString::new(format!("__linear_gradient_{}", counter))
+                        .expect("generated gradient id is non-empty");
+                    let cloned = LinearGradient {
+                        base: BaseGradient {
+                            id,
+                            units: Units::UserSpaceOnUse,
+                            transform,
+                            spread_method: lg.base.spread_method,
+                            stops: lg.base.stops.clone(),
+                        },
+                        x1: lg.x1,
+                        y1: lg.y1,
+                        x2: lg.x2,
+                        y2: lg.y2,
+                    };
+                    *lg = Arc::new(cloned);
+                }
+            }
+            true
+        }
+        Paint::RadialGradient(rg) => {
+            if rg.base.units != Units::ObjectBoundingBox {
+                return true;
+            }
+
+            let Some(non_zero_bbox) = bbox.to_non_zero_rect() else {
+                return false;
+            };
+
+            let transform = rg
+                .base
+                .transform
+                .post_concat(Transform::from_bbox(non_zero_bbox));
+
+            match Arc::get_mut(rg) {
+                Some(rg) => {
+                    rg.base.transform = transform;
+                    rg.base.units = Units::UserSpaceOnUse;
+                }
+                None => {
+                    *counter += 1;
+                    let id = NonEmptyString::new(format!("__radial_gradient_{}", counter))
+                        .expect("generated gradient id is non-empty");
+                    let cloned = RadialGradient {
+                        base: BaseGradient {
+                            id,
+                            units: Units::UserSpaceOnUse,
+                            transform,
+                            spread_method: rg.base.spread_method,
+                            stops: rg.base.stops.clone(),
+                        },
+                        cx: rg.cx,
+                        cy: rg.cy,
+                        r: rg.r,
+                        fx: rg.fx,
+                        fy: rg.fy,
+                        fr: rg.fr,
+                    };
+                    *rg = Arc::new(cloned);
+                }
+            }
+            true
+        }
+        Paint::Pattern(patt) => {
+            if patt.units == Units::UserSpaceOnUse
+                && patt.content_units == Units::UserSpaceOnUse
+                && patt.view_box.is_none()
+            {
+                return true;
+            }
+
+            let Some(non_zero_bbox) = bbox.to_non_zero_rect() else {
+                return false;
+            };
+
+            // `patternUnits="objectBoundingBox"` maps the pattern tile (its
+            // `x`/`y`/`width`/`height`) onto the shape's bbox.
+            let rect = if patt.units == Units::ObjectBoundingBox {
+                patt.rect.bbox_transform(non_zero_bbox)
+            } else {
+                patt.rect
+            };
+
+            // `patternContentUnits="objectBoundingBox"` (with no viewBox) scales
+            // the pattern's content by the bbox dimensions.
+            let content_transform =
+                if patt.content_units == Units::ObjectBoundingBox && patt.view_box.is_none() {
+                    Some(Transform::from_scale(
+                        non_zero_bbox.width(),
+                        non_zero_bbox.height(),
+                    ))
+                } else {
+                    None
+                };
+
+            let view_box_transform = patt
+                .view_box
+                .map(|view_box| view_box.to_transform(rect.size()));
+
+            match Arc::get_mut(patt) {
+                Some(patt) => {
+                    patt.rect = rect;
+                    patt.units = Units::UserSpaceOnUse;
+                    if let Some(transform) = content_transform {
+                        push_pattern_transform(&mut patt.root, transform);
+                    }
+                    if let Some(transform) = view_box_transform {
+                        push_pattern_transform(&mut patt.root, transform);
+                    }
+                    patt.content_units = Units::UserSpaceOnUse;
+                }
+                None => {
+                    // The pattern is shared by shapes with differing bboxes, so
+                    // clone it with a fresh id and resolved units/rect/root.
+                    let mut root = patt.root.clone();
+                    if let Some(transform) = content_transform {
+                        push_pattern_transform(&mut root, transform);
+                    }
+                    if let Some(transform) = view_box_transform {
+                        push_pattern_transform(&mut root, transform);
+                    }
+
+                    *counter += 1;
+                    let id = NonEmptyString::new(format!("__pattern_{}", counter))
+                        .expect("generated pattern id is non-empty");
+                    *patt = Arc::new(Pattern {
+                        id,
+                        units: Units::UserSpaceOnUse,
+                        content_units: Units::UserSpaceOnUse,
+                        transform: patt.transform,
+                        rect,
+                        view_box: None,
+                        root,
+                    });
+                }
+            }
+            true
+        }
+        Paint::Color(_) => true,
+    }
+}
+
+/// Wraps a pattern's content root in a new group carrying `transform`, so that
+/// `patternContentUnits="objectBoundingBox"` and `viewBox` scaling apply to the
+/// pattern's children.
+///
+/// Mirrors the parser's equivalent helper in `parser/paint_server.rs`.
+fn push_pattern_transform(root: &mut Group, transform: Transform) {
+    // TODO: update `abs_transform` in descendants as well.
+    let mut group = std::mem::replace(root, Group::empty());
+    group.transform = transform;
+    group.abs_transform = transform;
+
+    root.children.push(Node::Group(Box::new(group)));
+    let _ = root.calculate_bounding_boxes();
 }
 
 fn node_by_id<'a>(parent: &'a Group, id: &str) -> Option<&'a Node> {
@@ -1861,6 +2377,18 @@ impl Group {
         }
 
         bbox.to_non_zero_rect()
+    }
+
+    /// Recursively computes bounding boxes for this group and all nested groups,
+    /// then returns the object bounding box (the union of the children's bounding
+    /// boxes, in this group's local coordinate system).
+    ///
+    /// This is exposed so that `mask`/`clipPath` regions declared with
+    /// `objectBoundingBox` units can be resolved while building a tree
+    /// programmatically, before `Tree::finalize` runs.
+    pub fn compute_object_bbox(&mut self) -> Option<NonZeroRect> {
+        calculate_bounding_boxes_recursive(self);
+        self.calculate_object_bbox()
     }
 
     pub(crate) fn calculate_bounding_boxes(&mut self) -> Option<()> {

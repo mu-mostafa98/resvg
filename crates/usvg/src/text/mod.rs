@@ -29,6 +29,14 @@ impl From<GlyphId> for skrifa::raw::types::GlyphId {
     }
 }
 
+/// Computes the length of a [`tiny_skia_path::Path`] in SVG user units.
+///
+/// Used to resolve a `<textPath>` `startOffset` given as a percentage, which is
+/// interpreted as a fraction of the entire path length.
+pub fn path_length(path: &tiny_skia_path::Path) -> f32 {
+    crate::parser::text::path_length(path) as f32
+}
+
 /// A shorthand for [FontResolver]'s font selection function.
 ///
 /// This function receives a font specification (families + a style, weight,
@@ -227,4 +235,16 @@ pub(crate) fn convert(text: &mut Text, resolver: &FontResolver, cache: &mut Cach
     text.abs_stroke_bounding_box = stroke_bbox.transform(text.abs_transform)?.to_rect();
 
     Some(())
+}
+
+/// Layout a `Text` node that was built programmatically (rather than parsed
+/// from SVG) into positioned glyph outlines.
+///
+/// This is the public counterpart to the internal [`convert`]: it accepts a
+/// caller-owned `fontdb` (populated with the fonts the `resolver` expects) and
+/// performs text layout + flattening, populating `text.flattened` and friends.
+///
+/// Returns `None` when layout fails (e.g. no matching font could be found).
+pub fn layout(text: &mut Text, resolver: &FontResolver, cache: &mut Cache) -> Option<()> {
+    convert(text, resolver, cache)
 }

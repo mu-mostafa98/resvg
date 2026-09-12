@@ -20,7 +20,8 @@ use crate::tree::{BBox, IsValidLength};
 use crate::{
     AlignmentBaseline, ApproxZeroUlps, BaselineShift, DominantBaseline, Fill, FillRule, Font,
     FontResolver, GlyphId, LengthAdjust, PaintOrder, Path, ShapeRendering, Stroke, Text,
-    TextAnchor, TextChunk, TextDecorationStyle, TextFlow, TextPath, TextSpan, WritingMode,
+    TextAnchor, TextChunk, TextDecorationStyle, TextDirection, TextFlow, TextPath, TextSpan,
+    WritingMode,
 };
 
 /// A glyph that has already been positioned correctly.
@@ -229,7 +230,7 @@ pub(crate) fn layout_text(
             TextFlow::Path(_) => (0.0, 0.0),
         };
 
-        let mut clusters = process_chunk(chunk, &fonts_cache, resolver, fontdb);
+        let mut clusters = process_chunk(chunk, text_node.direction, &fonts_cache, resolver, fontdb);
         if clusters.is_empty() {
             char_offset += chunk.text.chars().count();
             continue;
@@ -245,6 +246,7 @@ pub(crate) fn layout_text(
             chunk,
             char_offset,
             text_node.writing_mode,
+            text_node.direction,
             &fonts_cache,
             &mut clusters,
         );
@@ -522,19 +524,26 @@ fn resolve_clusters_positions(
     chunk: &TextChunk,
     char_offset: usize,
     writing_mode: WritingMode,
+    direction: TextDirection,
     fonts_cache: &FontsCache,
     clusters: &mut [GlyphCluster],
 ) -> (f32, f32) {
     match chunk.text_flow {
-        TextFlow::Linear => {
-            resolve_clusters_positions_horizontal(text, chunk, char_offset, writing_mode, clusters)
-        }
+        TextFlow::Linear => resolve_clusters_positions_horizontal(
+            text,
+            chunk,
+            char_offset,
+            writing_mode,
+            direction,
+            clusters,
+        ),
         TextFlow::Path(ref path) => resolve_clusters_positions_path(
             text,
             chunk,
             char_offset,
             path,
             writing_mode,
+            direction,
             fonts_cache,
             clusters,
         ),
@@ -550,9 +559,10 @@ fn resolve_clusters_positions_horizontal(
     chunk: &TextChunk,
     offset: usize,
     writing_mode: WritingMode,
+    direction: TextDirection,
     clusters: &mut [GlyphCluster],
 ) -> (f32, f32) {
-    let mut x = process_anchor(chunk.anchor, clusters_length(clusters));
+    let mut x = process_anchor(chunk.anchor, clusters_length(clusters), direction);
     let mut y = 0.0;
 
     for cluster in clusters {
@@ -632,6 +642,7 @@ fn resolve_clusters_positions_path(
     char_offset: usize,
     path: &TextPath,
     writing_mode: WritingMode,
+    direction: TextDirection,
     fonts_cache: &FontsCache,
     clusters: &mut [GlyphCluster],
 ) -> (f32, f32) {
@@ -647,8 +658,9 @@ fn resolve_clusters_positions_path(
         WritingMode::TopToBottom => chunk.y.unwrap_or(0.0),
     };
 
-    let start_offset =
-        chunk_offset + path.start_offset + process_anchor(chunk.anchor, clusters_length(clusters));
+    let start_offset = chunk_offset
+        + path.start_offset
+        + process_anchor(chunk.anchor, clusters_length(clusters), direction);
 
     let normals = collect_normals(text, chunk, clusters, &path.path, char_offset, start_offset);
     for (cluster, normal) in clusters.iter_mut().zip(normals) {
@@ -710,11 +722,14 @@ fn resolve_clusters_positions_path(
     (last_x, last_y)
 }
 
-pub(crate) fn process_anchor(a: TextAnchor, text_width: f32) -> f32 {
-    match a {
-        TextAnchor::Start => 0.0, // Nothing.
-        TextAnchor::Middle => -text_width / 2.0,
-        TextAnchor::End => -text_width,
+pub(crate) fn process_anchor(a: TextAnchor, text_width: f32, direction: TextDirection) -> f32 {
+    match (a, direction) {
+        (TextAnchor::Middle, _) => -text_width / 2.0,
+        (TextAnchor::Start, TextDirection::LeftToRight) => 0.0, // Nothing.
+        (TextAnchor::End, TextDirection::LeftToRight) => -text_width,
+        // In RTL, "start" is the right edge and "end" is the left edge.
+        (TextAnchor::Start, TextDirection::RightToLeft) => -text_width,
+        (TextAnchor::End, TextDirection::RightToLeft) => 0.0,
     }
 }
 
@@ -861,6 +876,7 @@ fn collect_normals(
 /// but not the text layouting. So all clusters are in the 0x0 position.
 fn process_chunk(
     chunk: &TextChunk,
+    direction: TextDirection,
     fonts_cache: &FontsCache,
     resolver: &FontResolver,
     fontdb: &mut Arc<fontdb::Database>,
@@ -916,6 +932,7 @@ fn process_chunk(
             &span.font.variations,
             span.font_size.get(),
             span.font_optical_sizing,
+            direction,
             resolver,
             fontdb,
         );
@@ -1327,6 +1344,7 @@ pub(crate) fn shape_text(
     variations: &[crate::FontVariation],
     font_size: f32,
     font_optical_sizing: crate::FontOpticalSizing,
+    direction: TextDirection,
     resolver: &FontResolver,
     fontdb: &mut Arc<fontdb::Database>,
 ) -> Vec<Glyph> {
@@ -1338,6 +1356,7 @@ pub(crate) fn shape_text(
         variations,
         font_size,
         font_optical_sizing,
+        direction,
         fontdb,
     )
     .unwrap_or_default();
@@ -1372,6 +1391,7 @@ pub(crate) fn shape_text(
                 variations,
                 font_size,
                 font_optical_sizing,
+                direction,
                 fontdb,
             )
             .unwrap_or_default();
@@ -1432,6 +1452,7 @@ fn shape_text_with_font(
     variations: &[crate::FontVariation],
     font_size: f32,
     font_optical_sizing: crate::FontOpticalSizing,
+    direction: TextDirection,
     fontdb: &fontdb::Database,
 ) -> Option<Vec<Glyph>> {
     fontdb.with_face_data(font.id, |font_data, face_index| -> Option<Vec<Glyph>> {
@@ -1463,7 +1484,11 @@ fn shape_text_with_font(
             }
         }
 
-        let bidi_info = unicode_bidi::BidiInfo::new(text, Some(unicode_bidi::Level::ltr()));
+        let base_level = match direction {
+            TextDirection::LeftToRight => unicode_bidi::Level::ltr(),
+            TextDirection::RightToLeft => unicode_bidi::Level::rtl(),
+        };
+        let bidi_info = unicode_bidi::BidiInfo::new(text, Some(base_level));
         let paragraph = &bidi_info.paragraphs[0];
         let line = paragraph.range.clone();
 

@@ -10,14 +10,24 @@ use crate::{BlendMode, Color, Group, NonEmptyString, NonZeroF32, NonZeroRect, Op
 /// A filter element.
 ///
 /// `filter` element in the SVG.
+#[allow(missing_docs)]
 #[derive(Debug)]
 pub struct Filter {
-    pub(crate) id: NonEmptyString,
-    pub(crate) rect: NonZeroRect,
-    pub(crate) primitives: Vec<Primitive>,
+    pub id: NonEmptyString,
+    pub rect: NonZeroRect,
+    pub primitives: Vec<Primitive>,
 }
 
 impl Filter {
+    /// Creates a new filter.
+    pub fn new(id: NonEmptyString, rect: NonZeroRect, primitives: Vec<Primitive>) -> Self {
+        Filter {
+            id,
+            rect,
+            primitives,
+        }
+    }
+
     /// Element's ID.
     ///
     /// Taken from the SVG itself.
@@ -40,15 +50,31 @@ impl Filter {
 }
 
 /// A filter primitive element.
+#[allow(missing_docs)]
 #[derive(Clone, Debug)]
 pub struct Primitive {
-    pub(crate) rect: NonZeroRect,
-    pub(crate) color_interpolation: ColorInterpolation,
-    pub(crate) result: String,
-    pub(crate) kind: Kind,
+    pub rect: NonZeroRect,
+    pub color_interpolation: ColorInterpolation,
+    pub result: String,
+    pub kind: Kind,
 }
 
 impl Primitive {
+    /// Creates a new filter primitive.
+    pub fn new(
+        rect: NonZeroRect,
+        color_interpolation: ColorInterpolation,
+        result: String,
+        kind: Kind,
+    ) -> Self {
+        Primitive {
+            rect,
+            color_interpolation,
+            result,
+            kind,
+        }
+    }
+
     /// Filter subregion.
     ///
     /// `x`, `y`, `width` and `height` in the SVG.
@@ -155,6 +181,15 @@ pub struct Blend {
 }
 
 impl Blend {
+    /// Creates a new blend primitive.
+    pub fn new(input1: Input, input2: Input, mode: BlendMode) -> Self {
+        Blend {
+            input1,
+            input2,
+            mode,
+        }
+    }
+
     /// Identifies input for the given filter primitive.
     ///
     /// `in` in the SVG.
@@ -187,6 +222,11 @@ pub struct ColorMatrix {
 }
 
 impl ColorMatrix {
+    /// Creates a new color matrix primitive.
+    pub fn new(input: Input, kind: ColorMatrixKind) -> Self {
+        ColorMatrix { input, kind }
+    }
+
     /// Identifies input for the given filter primitive.
     ///
     /// `in` in the SVG.
@@ -234,6 +274,23 @@ pub struct ComponentTransfer {
 }
 
 impl ComponentTransfer {
+    /// Creates a new component transfer primitive.
+    pub fn new(
+        input: Input,
+        func_r: TransferFunction,
+        func_g: TransferFunction,
+        func_b: TransferFunction,
+        func_a: TransferFunction,
+    ) -> Self {
+        ComponentTransfer {
+            input,
+            func_r,
+            func_g,
+            func_b,
+            func_a,
+        }
+    }
+
     /// Identifies input for the given filter primitive.
     ///
     /// `in` in the SVG.
@@ -304,6 +361,15 @@ pub struct Composite {
 }
 
 impl Composite {
+    /// Creates a new composite primitive.
+    pub fn new(input1: Input, input2: Input, operator: CompositeOperator) -> Self {
+        Composite {
+            input1,
+            input2,
+            operator,
+        }
+    }
+
     /// Identifies input for the given filter primitive.
     ///
     /// `in` in the SVG.
@@ -352,6 +418,25 @@ pub struct ConvolveMatrix {
 }
 
 impl ConvolveMatrix {
+    /// Creates a new convolve matrix primitive.
+    pub fn new(
+        input: Input,
+        matrix: ConvolveMatrixData,
+        divisor: NonZeroF32,
+        bias: f32,
+        edge_mode: EdgeMode,
+        preserve_alpha: bool,
+    ) -> Self {
+        ConvolveMatrix {
+            input,
+            matrix,
+            divisor,
+            bias,
+            edge_mode,
+            preserve_alpha,
+        }
+    }
+
     /// Identifies input for the given filter primitive.
     ///
     /// `in` in the SVG.
@@ -448,7 +533,7 @@ impl ConvolveMatrixData {
     /// - `columns` * `rows` != `data.len()`
     /// - `target_x` >= `columns`
     /// - `target_y` >= `rows`
-    pub(crate) fn new(
+    pub fn new(
         target_x: u32,
         target_y: u32,
         columns: u32,
@@ -500,6 +585,23 @@ pub struct DisplacementMap {
 }
 
 impl DisplacementMap {
+    /// Creates a new displacement map primitive.
+    pub fn new(
+        input1: Input,
+        input2: Input,
+        scale: f32,
+        x_channel_selector: ColorChannel,
+        y_channel_selector: ColorChannel,
+    ) -> Self {
+        DisplacementMap {
+            input1,
+            input2,
+            scale,
+            x_channel_selector,
+            y_channel_selector,
+        }
+    }
+
     /// Identifies input for the given filter primitive.
     ///
     /// `in` in the SVG.
@@ -563,6 +665,27 @@ pub struct DropShadow {
 }
 
 impl DropShadow {
+    /// Creates a new drop shadow primitive.
+    pub fn new(
+        input: Input,
+        dx: f32,
+        dy: f32,
+        std_dev_x: PositiveF32,
+        std_dev_y: PositiveF32,
+        color: Color,
+        opacity: Opacity,
+    ) -> Self {
+        DropShadow {
+            input,
+            dx,
+            dy,
+            std_dev_x,
+            std_dev_y,
+            color,
+            opacity,
+        }
+    }
+
     /// Identifies input for the given filter primitive.
     ///
     /// `in` in the SVG.
@@ -619,6 +742,11 @@ pub struct Flood {
 }
 
 impl Flood {
+    /// Creates a new flood primitive.
+    pub fn new(color: Color, opacity: Opacity) -> Self {
+        Flood { color, opacity }
+    }
+
     /// A flood color.
     ///
     /// `flood-color` in the SVG.
@@ -645,6 +773,15 @@ pub struct GaussianBlur {
 }
 
 impl GaussianBlur {
+    /// Creates a new Gaussian blur primitive.
+    pub fn new(input: Input, std_dev_x: PositiveF32, std_dev_y: PositiveF32) -> Self {
+        GaussianBlur {
+            input,
+            std_dev_x,
+            std_dev_y,
+        }
+    }
+
     /// Identifies input for the given filter primitive.
     ///
     /// `in` in the SVG.
@@ -676,6 +813,11 @@ pub struct Image {
 }
 
 impl Image {
+    /// Creates a new image primitive.
+    pub fn new(root: Group) -> Self {
+        Image { root }
+    }
+
     /// `feImage` children.
     pub fn root(&self) -> &Group {
         &self.root
@@ -695,6 +837,23 @@ pub struct DiffuseLighting {
 }
 
 impl DiffuseLighting {
+    /// Creates a new diffuse lighting primitive.
+    pub fn new(
+        input: Input,
+        surface_scale: f32,
+        diffuse_constant: f32,
+        lighting_color: Color,
+        light_source: LightSource,
+    ) -> Self {
+        DiffuseLighting {
+            input,
+            surface_scale,
+            diffuse_constant,
+            lighting_color,
+            light_source,
+        }
+    }
+
     /// Identifies input for the given filter primitive.
     ///
     /// `in` in the SVG.
@@ -743,6 +902,25 @@ pub struct SpecularLighting {
 }
 
 impl SpecularLighting {
+    /// Creates a new specular lighting primitive.
+    pub fn new(
+        input: Input,
+        surface_scale: f32,
+        specular_constant: f32,
+        specular_exponent: f32,
+        lighting_color: Color,
+        light_source: LightSource,
+    ) -> Self {
+        SpecularLighting {
+            input,
+            surface_scale,
+            specular_constant,
+            specular_exponent,
+            lighting_color,
+            light_source,
+        }
+    }
+
     /// Identifies input for the given filter primitive.
     ///
     /// `in` in the SVG.
@@ -888,6 +1066,11 @@ pub struct Merge {
 }
 
 impl Merge {
+    /// Creates a new merge primitive.
+    pub fn new(inputs: Vec<Input>) -> Self {
+        Merge { inputs }
+    }
+
     /// List of input layers that should be merged.
     ///
     /// List of `feMergeNode`'s in the SVG.
@@ -908,6 +1091,21 @@ pub struct Morphology {
 }
 
 impl Morphology {
+    /// Creates a new morphology primitive.
+    pub fn new(
+        input: Input,
+        operator: MorphologyOperator,
+        radius_x: PositiveF32,
+        radius_y: PositiveF32,
+    ) -> Self {
+        Morphology {
+            input,
+            operator,
+            radius_x,
+            radius_y,
+        }
+    }
+
     /// Identifies input for the given filter primitive.
     ///
     /// `in` in the SVG.
@@ -960,6 +1158,11 @@ pub struct Offset {
 }
 
 impl Offset {
+    /// Creates a new offset primitive.
+    pub fn new(input: Input, dx: f32, dy: f32) -> Self {
+        Offset { input, dx, dy }
+    }
+
     /// Identifies input for the given filter primitive.
     ///
     /// `in` in the SVG.
@@ -987,6 +1190,11 @@ pub struct Tile {
 }
 
 impl Tile {
+    /// Creates a new tile primitive.
+    pub fn new(input: Input) -> Self {
+        Tile { input }
+    }
+
     /// Identifies input for the given filter primitive.
     ///
     /// `in` in the SVG.
@@ -1009,6 +1217,25 @@ pub struct Turbulence {
 }
 
 impl Turbulence {
+    /// Creates a new turbulence primitive.
+    pub fn new(
+        base_frequency_x: PositiveF32,
+        base_frequency_y: PositiveF32,
+        num_octaves: u32,
+        seed: i32,
+        stitch_tiles: bool,
+        kind: TurbulenceKind,
+    ) -> Self {
+        Turbulence {
+            base_frequency_x,
+            base_frequency_y,
+            num_octaves,
+            seed,
+            stitch_tiles,
+            kind,
+        }
+    }
+
     /// Identifies the base frequency for the noise function.
     ///
     /// `baseFrequency` in the SVG.

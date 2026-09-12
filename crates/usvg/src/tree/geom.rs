@@ -45,7 +45,7 @@ impl IsValidLength for f64 {
 
 /// View box.
 #[derive(Clone, Copy, Debug)]
-pub(crate) struct ViewBox {
+pub struct ViewBox {
     /// Value of the `viewBox` attribute.
     pub rect: NonZeroRect,
 

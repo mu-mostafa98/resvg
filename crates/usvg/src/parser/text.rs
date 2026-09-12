@@ -106,6 +106,7 @@ pub(crate) fn convert(
     let pos_list = resolve_positions_list(text_node, state);
     let rotate_list = resolve_rotate_list(text_node);
     let writing_mode = convert_writing_mode(text_node);
+    let direction = convert_direction(text_node);
 
     let chunks = collect_text_chunks(text_node, &pos_list, state, cache);
 
@@ -129,6 +130,7 @@ pub(crate) fn convert(
         dy: pos_list.iter().map(|v| v.dy.unwrap_or(0.0)).collect(),
         rotate: rotate_list,
         writing_mode,
+        direction,
         chunks,
         abs_transform: parent.abs_transform,
         // All fields below will be reset by `text_to_paths`.
@@ -909,7 +911,21 @@ fn convert_writing_mode(text_node: SvgNode) -> WritingMode {
     }
 }
 
-fn path_length(path: &tiny_skia_path::Path) -> f64 {
+fn convert_direction(text_node: SvgNode) -> TextDirection {
+    if let Some(n) = text_node
+        .ancestors()
+        .find(|n| n.has_attribute(AId::Direction))
+    {
+        match n.attribute(AId::Direction).unwrap_or("ltr") {
+            "rtl" => TextDirection::RightToLeft,
+            _ => TextDirection::LeftToRight,
+        }
+    } else {
+        TextDirection::LeftToRight
+    }
+}
+
+pub(crate) fn path_length(path: &tiny_skia_path::Path) -> f64 {
     let mut prev_mx = path.points()[0].x;
     let mut prev_my = path.points()[0].y;
     let mut prev_x = prev_mx;
